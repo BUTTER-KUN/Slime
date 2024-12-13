@@ -34,22 +34,18 @@ app.get("/getPlayer", async (req, res) => {
     }
 });
 
+
 app.post("/addItem", async (req, res) => {
     try {
-        console.log("Request received:", req.query);
-
         const { userID, itemName } = req.query;
         let { amount } = req.query;
         amount = amount ? parseInt(amount, 10) : 1;
 
-        // Use mongoose.Types.ObjectId correctly
-        const objectId = mongoose.Types.ObjectId(userID);
-        console.log("Converted userID to ObjectId:", objectId);
+        const objectId = new mongoose.Types.ObjectId(userID);
 
         // Find player
         const player = await Player.findOne({ _id: objectId }).select("-__v");
         if (!player) {
-            console.log("Player not found with ID:", objectId);
             return res.status(404).send("Player not found");
         }
 
@@ -59,17 +55,14 @@ app.post("/addItem", async (req, res) => {
             { $setOnInsert: { name: itemName } },
             { new: true, upsert: true }
         );
-        console.log("Item found or created:", item);
 
         // Ensure that inventory exists
         if (!player.itemInventory) {
-            console.log("Initializing empty item inventory for player");
             player.itemInventory = [];
         }
 
         // Find existing item index
         const existingItemIndex = player.itemInventory.findIndex(invItem => invItem._id.toString() === item._id.toString());
-        console.log("Existing item index:", existingItemIndex);
 
         if (existingItemIndex !== -1) {
             // If the item exists, increment the amount
@@ -77,19 +70,16 @@ app.post("/addItem", async (req, res) => {
                 { _id: objectId, 'itemInventory._id': item._id },
                 { $inc: { 'itemInventory.$.amount': amount } }
             );
-            console.log("Item amount incremented:", item._id);
         } else {
             // If the item doesn't exist, add it to the inventory
             await Player.updateOne(
                 { _id: objectId },
                 { $push: { 'itemInventory': { _id: item._id, amount: amount } } }
             );
-            console.log("Item added to inventory:", item._id);
         }
 
         // Fetch the updated player
         const updatedUser = await Player.findOne({ _id: objectId }).select("-__v");
-        console.log("Updated player:", updatedUser);
         res.status(200).json(updatedUser);
 
     } catch (error) {
