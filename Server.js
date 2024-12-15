@@ -269,8 +269,6 @@ app.post("/deleteSkill", async (req, res) => {
     }
 });
 
-
-
 //http://localhost:4500/getItem?playerID={}
 app.get("/getItem", async (req, res) => {
     try {
@@ -439,20 +437,135 @@ app.post("/updateObjective", async (req, res) => {
     }
 });
 
+//http://localhost:4500/getQuestProgress?playerID={}&objectiveID={}
+app.get("/getQuestProgress", async (req, res) => { 
+    try {
+        const { playerID, objectiveID } = req.query;
 
+        // Validate playerID
+        if (!mongoose.Types.ObjectId.isValid(playerID)) {
+            return res.status(400).send("Invalid player ID");
+        }
 
+        const objectId = new mongoose.Types.ObjectId(playerID);
 
+        // Fetch the player by ID and retrieve questProgress field
+        const player = await Player.findOne({ _id: objectId }).select("questProgress");
+        if (!player) {
+            return res.status(404).send("Player not found");
+        }
 
+        const questProgress = player.questProgress || [];
 
+        // Return empty array if no quest progress exists
+        if (questProgress.length === 0) {
+            return res.json([]);
+        }
 
+        // Filter by objectiveID if provided
+        let filteredQuestProgress = questProgress;
+        if (objectiveID) {
+            if (!mongoose.Types.ObjectId.isValid(objectiveID)) {
+                return res.status(400).send("Invalid objective ID");
+            }
+            filteredQuestProgress = questProgress.filter(progress => progress._id.toString() === objectiveID);
+            if (filteredQuestProgress.length === 0) {
+                return res.status(404).send("Objective not found in quest progress.");
+            }
+        }
 
+        // Extract objective IDs from the filtered quest progress
+        const objectiveIds = filteredQuestProgress.map(progress => progress._id);
 
+        // Fetch the full details of each objective
+        const objectives = await QuestObjective.find({ _id: { $in: objectiveIds } });
 
+        // Create a map of objective IDs to objective details
+        const objectiveMap = objectives.reduce((map, objective) => {
+            map[objective._id.toString()] = objective;
+            return map;
+        }, {});
 
+        // Format the quest progress data
+        const formattedQuestProgress = filteredQuestProgress.map(progress => ({
+            _id: progress._id,
+            name: objectiveMap[progress._id.toString()] ? objectiveMap[progress._id.toString()].name : 'Unknown Objective',
+            enemyID: progress.enemyID,
+            requiredAmount: progress.requiredAmount,
+            currentAmount: progress.currentAmount
+        }));
 
+        res.json(formattedQuestProgress);
+    } catch (error) {
+        console.error("Error retrieving quest progress:", error);
+        res.status(500).send("Error retrieving quest progress.");
+    }
+});
 
+//http://localhost:4500/getRewards?questID={}
+app.get("/getRewards", async (req, res) => { 
+    try {
+        const { questID } = req.query;
 
+        // Fetch the quest and populate the reward field
+        const quest = await Quest.findById(questID).populate("reward");
+        if (!quest) {
+            return res.status(404).send("Quest not found.");
+        }
 
+        // If no reward is associated, return an empty response
+        if (!quest.reward) {
+            return res.json({ message: "No rewards associated with this quest." });
+        }
+
+        // Format the reward data
+        const rewardDetails = {
+            name: quest.reward.name,
+            coin: quest.reward.coin,
+            xp: quest.reward.xp,
+            items: quest.reward.item 
+        };
+
+        res.json(rewardDetails);
+    } catch (error) {
+        console.error("Error retrieving rewards:", error);
+        res.status(500).send("Error retrieving rewards.");
+    }
+});
+
+//http://localhost:4500/addProgress?playerID={}&objectiveID={}
+app.post("/addProgress", async (req, res) => {
+    try {
+        const { playerID, objectiveID } = req.query;
+
+        // Fetch player and check for existence
+        const player = await Player.findById(playerID);
+        if (!player) {
+            return res.status(404).send("Player not found.");
+        }
+
+        // Check if questProgress exists and contains the objective
+        const objectiveIndex = player.questProgress.findIndex(
+            (progress) => progress._id.toString() === objectiveID
+        );
+
+        if (objectiveIndex === -1) {
+            return res.status(404).send("Objective not found in quest progress.");
+        }
+
+        // Update questProgress atomically
+        const updatedPlayer = await Player.findByIdAndUpdate(
+            playerID,
+            { $inc: { [`questProgress.${objectiveIndex}.currentAmount`]: 1 } },
+            { new: true, select: "questProgress" }
+        );
+
+        res.status(200).json(updatedPlayer.questProgress);
+    } catch (error) {
+        console.error("Error adding progress:", error);
+        res.status(500).send("Error adding progress.");
+    }
+});
 
 
 const connectDB = async () =>{
