@@ -1,4 +1,5 @@
 
+// #region imaport
 const express = require("express")
 const app = express()
 const dotenv = require("dotenv")
@@ -11,6 +12,9 @@ const Reward = require("./models/Reward.js")
 const Quest = require("./models/Quest.js")
 const Enemy = require("./models/Enemy.js")
 const EnemySpawner = require("./models/EnemySpawner.js")
+const BossEvent = require("./models/BossEvent.js")
+const GrindingEvent = require("./models/GrindingEvent.js")
+// #endregion
 
 //http://localhost:4500/createPlayer
 app.post("/createPlayer", async (req, res) => {
@@ -39,27 +43,27 @@ app.get("/getPlayer", async (req, res) => {
     }
 });
 
-//http://localhost:4500/addItem?playerID={}&itemName={}&amount={}
+//http://localhost:4500/addItem?playerID={}&itemID={}&amount={}
 app.post("/addItem", async (req, res) => {
     try {
-        const { playerID, itemName } = req.query;
+        const { playerID, itemID } = req.query;
         let { amount } = req.query;
         amount = amount ? parseInt(amount, 10) : 1;
 
-        const objectId = new mongoose.Types.ObjectId(playerID);
+        const playerObjectId = new mongoose.Types.ObjectId(playerID);
+        const itemObjectId = new mongoose.Types.ObjectId(itemID);
 
         // Find player
-        const player = await Player.findOne({ _id: objectId }).select("-__v");
+        const player = await Player.findOne({ _id: playerObjectId }).select("-__v");
         if (!player) {
             return res.status(404).send("Player not found");
         }
 
-        // Find or create the item
-        let item = await Item.findOneAndUpdate(
-            { name: itemName },
-            { $setOnInsert: { name: itemName } },
-            { new: true, upsert: true }
-        );
+        const item = await Item.findOne({ _id: itemObjectId });
+        if (!item) {
+            return res.status(404).send("Item not found");
+        }
+
 
         // Ensure that inventory exists
         if (!player.itemInventory) {
@@ -72,19 +76,19 @@ app.post("/addItem", async (req, res) => {
         if (existingItemIndex !== -1) {
             // If the item exists, increment the amount
             await Player.updateOne(
-                { _id: objectId, 'itemInventory._id': item._id },
+                { _id: playerObjectId, 'itemInventory._id': item._id },
                 { $inc: { 'itemInventory.$.amount': amount } }
             );
         } else {
             // If the item doesn't exist, add it to the inventory
             await Player.updateOne(
-                { _id: objectId },
+                { _id: playerObjectId },
                 { $push: { 'itemInventory': { _id: item._id, amount: amount } } }
             );
         }
 
         // Fetch the updated player
-        const updatedPlayer = await Player.findOne({ _id: objectId }).select("-__v");
+        const updatedPlayer = await Player.findOne({ _id: playerObjectId }).select("-__v");
         res.status(200).json(updatedPlayer);
 
     } catch (error) {
@@ -93,31 +97,31 @@ app.post("/addItem", async (req, res) => {
     }
 });
 
-//http://localhost:4500/deleteItem?playerID={}&itemName={}&amount={}
+//http://localhost:4500/deleteItem?playerID={}&itemID={}&amount={}
 app.post("/deleteItem", async (req, res) => {
     try {
-        const { playerID, itemName } = req.query;
+        const { playerID, itemID } = req.query; // Use itemID instead of itemName
         let { amount } = req.query;
         amount = amount ? parseInt(amount, 10) : 1;
 
-        const objectId = new mongoose.Types.ObjectId(playerID);
+        const playerObjectId = new mongoose.Types.ObjectId(playerID);
+        const itemObjectId = new mongoose.Types.ObjectId(itemID);
 
         // Find player
-        const player = await Player.findOne({ _id: objectId }).select("-__v");
+        const player = await Player.findOne({ _id: playerObjectId }).select("-__v");
         if (!player) {
             return res.status(404).send("Player not found");
         }
 
-        // Find or create the item
-        const item = await Item.findOne({ name: itemName });
-
         // Ensure that inventory exists
-        if (!player.itemInventory) {
-            player.itemInventory = [];
+        if (!player.itemInventory || player.itemInventory.length === 0) {
+            return res.status(404).send("Player's inventory is empty");
         }
 
-        // Find existing item index
-        const existingItemIndex = player.itemInventory.findIndex(invItem => invItem._id.toString() === item._id.toString());
+        // Find existing item index in the player's inventory
+        const existingItemIndex = player.itemInventory.findIndex(
+            invItem => invItem._id.toString() === itemObjectId.toString()
+        );
 
         if (existingItemIndex === -1) {
             return res.status(404).send("Item not found in user's inventory");
@@ -128,77 +132,81 @@ app.post("/deleteItem", async (req, res) => {
         if (currentAmount > amount) {
             // If the current amount is greater than the amount to delete, decrement the amount
             await Player.updateOne(
-                { _id: objectId, 'itemInventory._id': item._id },
+                { _id: playerObjectId, 'itemInventory._id': itemObjectId },
                 { $inc: { 'itemInventory.$.amount': -amount } }
             );
         } else {
             // If the current amount is less than or equal to the amount to delete, remove the item
             await Player.updateOne(
-                { _id: objectId },
-                { $pull: { 'itemInventory': { _id: item._id } } }
+                { _id: playerObjectId },
+                { $pull: { 'itemInventory': { _id: itemObjectId } } }
             );
         }
 
         // Fetch the updated player
-        const updatedPlayer = await Player.findOne({ _id: objectId }).select("-__v");
+        const updatedPlayer = await Player.findOne({ _id: playerObjectId }).select("-__v");
         res.status(200).json(updatedPlayer);
 
     } catch (error) {
         console.error("Error:", error);
-        res.status(500).send("Error adding item to inventory");
+        res.status(500).send("Error deleting item from inventory");
     }
 });
 
-//http://localhost:4500/addSkill?playerID={}&skillName={}
+
+//http://localhost:4500/addSkill?playerID={}&skillID={}
 app.post("/addSkill", async (req, res) => {
     try {
-        const { playerID, skillName } = req.query;
+        const { playerID, skillID } = req.query; // Use skillID instead of skillName
         let { level } = req.query;
 
         // Validate inputs
-        if (!skillName || skillName.trim() === "") {
-            return res.status(400).send("Invalid skill name");
+        if (!skillID || skillID.trim() === "") {
+            return res.status(400).send("Invalid skill ID");
         }
 
         level = level ? parseInt(level, 10) : 1;
-        const objectId = new mongoose.Types.ObjectId(playerID);
+        const playerObjectId = new mongoose.Types.ObjectId(playerID);
+        const skillObjectId = new mongoose.Types.ObjectId(skillID);
 
         // Find player
-        const player = await Player.findOne({ _id: objectId }).select("-__v");
+        const player = await Player.findOne({ _id: playerObjectId }).select("-__v");
         if (!player) {
             return res.status(404).send("Player not found");
         }
 
-        // Find or create the skill
-        let skill = await Skill.findOneAndUpdate(
-            { name: skillName },
-            { $setOnInsert: { name: skillName } },
-            { new: true, upsert: true }
-        );
+        // Find the skill
+        const skill = await Skill.findById(skillObjectId);
+        if (!skill) {
+            return res.status(404).send("Skill not found");
+        }
 
+        // Ensure that skillInventory exists
         if (!player.skillInventory) {
             player.skillInventory = [];
         }
 
+        // Find existing skill index in the player's skill inventory
         const existingSkillIndex = player.skillInventory.findIndex(
-            invSkill => invSkill._id.toString() === skill._id.toString()
+            invSkill => invSkill._id.toString() === skillObjectId.toString()
         );
 
         if (existingSkillIndex !== -1) {
             // Increment level if skill already exists
             await Player.updateOne(
-                { _id: objectId, "skillInventory._id": skill._id },
+                { _id: playerObjectId, "skillInventory._id": skillObjectId },
                 { $inc: { "skillInventory.$.level": level } }
             );
         } else {
             // Add the skill to inventory if not already present
             await Player.updateOne(
-                { _id: objectId },
-                { $push: { skillInventory: { _id: skill._id, level: level } } }
+                { _id: playerObjectId },
+                { $push: { skillInventory: { _id: skillObjectId, level: level } } }
             );
         }
 
-        const updatedPlayer = await Player.findOne({ _id: objectId }).select("-__v");
+        // Fetch updated player data
+        const updatedPlayer = await Player.findOne({ _id: playerObjectId }).select("-__v");
         res.status(200).json(updatedPlayer);
     } catch (error) {
         console.error("Error:", error);
@@ -206,56 +214,61 @@ app.post("/addSkill", async (req, res) => {
     }
 });
 
-//http://localhost:4500/deleteSkill?playerID={}&skillName={}&amount={}
+
+//http://localhost:4500/deleteSkill?playerID={}&skillID={}
 app.post("/deleteSkill", async (req, res) => {
     try {
-        const { playerID, skillName } = req.query;
+        const { playerID, skillID } = req.query;
 
-        const objectId = new mongoose.Types.ObjectId(playerID);
+        // Validate inputs
+        if (!skillID || skillID.trim() === "") {
+            return res.status(400).send("Invalid skill ID");
+        }
+
+        const playerObjectId = new mongoose.Types.ObjectId(playerID);
+        const skillObjectId = new mongoose.Types.ObjectId(skillID);
 
         // Find player
-        const player = await Player.findOne({ _id: objectId }).select("-__v");
+        const player = await Player.findOne({ _id: playerObjectId }).select("-__v");
         if (!player) {
             return res.status(404).send("Player not found");
         }
 
         // Find the skill
-        const skill = await Skill.findOne({ name: skillName });
-
-        // If the skill doesn't exist in the global database
+        const skill = await Skill.findById(skillObjectId);
         if (!skill) {
             return res.status(404).send("Skill not found in global skill list");
         }
 
-        // Ensure that inventory exists
+        // Ensure that skillInventory exists
         if (!player.skillInventory) {
             player.skillInventory = [];
         }
 
-        // Find existing skill index
+        // Find existing skill in the player's inventory
         const existingSkillIndex = player.skillInventory.findIndex(
-            invSkill => invSkill._id.toString() === skill._id.toString()
+            invSkill => invSkill._id.toString() === skillObjectId.toString()
         );
 
         if (existingSkillIndex === -1) {
             return res.status(404).send("Skill not found in user's inventory");
-        } else {
-            // If the current amount is less than or equal to the amount to delete, remove the item
-            await Player.updateOne(
-                { _id: objectId },
-                { $pull: { 'skillInventory': { _id: skill._id } } }
-            );
         }
 
-        // Fetch the updated player
-        const updatedPlayer = await Player.findOne({ _id: objectId }).select("-__v");
-        res.status(200).json(updatedPlayer);
+        // Remove the skill from the inventory
+        await Player.updateOne(
+            { _id: playerObjectId },
+            { $pull: { skillInventory: { _id: skillObjectId } } }
+        );
 
+        // Fetch and return the updated player
+        const updatedPlayer = await Player.findOne({ _id: playerObjectId }).select("-__v");
+        res.status(200).json(updatedPlayer);
     } catch (error) {
         console.error("Error:", error);
         res.status(500).send("Error deleting skill from inventory");
     }
 });
+
 
 
 //http://localhost:4500/getItem?playerID={}
@@ -347,6 +360,91 @@ app.get("/getSkill", async (req, res) => {
         res.status(500).send("Error retrieving inventory");
     }
 });
+
+//http://localhost:4500/addCurrentQuest?playerID={}&questID
+app.post("/addCurrentQuest", async (req, res) => {
+    try {
+        const { playerID, questID } = req.query;
+
+        const playerObjectId = new mongoose.Types.ObjectId(playerID);
+        const questObjectId = new mongoose.Types.ObjectId(questID);
+
+        // Find player
+        const player = await Player.findOne({ _id: playerObjectId }).select("-__v");
+        if (!player) {
+            return res.status(404).send("Player not found");
+        }
+
+        const quest = await Quest.findOne({ _id: questObjectId });
+        if (!quest) {
+            return res.status(404).send("Item not found");
+        }
+
+        const updatedPlayer = await Player.findByIdAndUpdate(
+            playerObjectId,
+            { currentQuest: questObjectId },
+            { new: true, select: "-__v" } // Return the updated player document
+        );
+
+        res.status(200).json({
+            message: "Current quest updated successfully.",
+            updatedPlayer,
+        });
+
+
+    } catch (error) {
+        console.error("Error:", error);
+        res.status(500).send("Error adding item to inventory");
+    }
+});
+//http://localhost:4500/updateObjective?playerID={}
+app.post("/updateObjective", async (req, res) => {
+    try {
+        const { playerID } = req.query;
+
+        // Fetch player and populate currentQuest and objectives
+        const player = await Player.findById(playerID)
+            .populate({
+                path: "currentQuest",
+                populate: { path: "objective" },
+            })
+            .exec();
+
+        if (!player) {
+            return res.status(404).send("Player not found");
+        }
+
+        if (!player.currentQuest || !Array.isArray(player.currentQuest.objective) || player.currentQuest.objective.length === 0) {
+            return res.status(400).send("Current quest has no objectives.");
+        }
+
+        // Update quest progress
+        const updatedProgress = player.currentQuest.objective.map((objective) => ({
+            _id: objective._id,
+            name: objective.name,
+            enemyID: objective.enemyID,
+            requiredAmount: objective.requiredAmount,
+            currentAmount: 0,
+        }));
+
+        // Manually update the questProgress
+        player.questProgress = updatedProgress;
+
+        // Return the updated player or quest information
+        res.status(200).json(player); // You can modify this to return only necessary fields
+
+    } catch (error) {
+        console.error("Error updating quest progress:", error);
+        res.status(500).send("Error updating quest progress.");
+    }
+});
+
+
+
+
+
+
+
 
 
 

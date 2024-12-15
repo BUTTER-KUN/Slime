@@ -1,12 +1,12 @@
 const mongoose = require("mongoose")
 
-const EnemySpawnerSchema = new mongoose.Schema({
+const BossEventSchema = new mongoose.Schema({
     name : String,
-    enemy : { type: Array, default: [] },
-    spawnPos: {
-        x: { type: Number, default: 0 },
-        y: { type: Number, default: 0 },
-      }
+    day : { type: Array, default: [] },
+    startTime: { type: Date, required: true },
+    endTime: { type: Date, required: true },
+    spawner : { type: mongoose.Schema.Types.ObjectId, ref: "EnemySpawner" },
     });
-const EnemySpawner = mongoose.model("EnemySpawner", EnemySpawnerSchema);
-module.exports = EnemySpawner;
+    
+const BossEvent = mongoose.model("BossEvent", BossEventSchema);
+module.exports = BossEvent;

@@ -15,7 +15,9 @@ const PlayerSchema = new mongoose.Schema({
             y: { type: Number, default: 0 },
           },
           lastScene: {type: Number,default: 1},
-          currentQuest: { type: mongoose.Schema.Types.ObjectId, ref: "Quest" }
+          currentQuest: { type: mongoose.Schema.Types.ObjectId, ref: "Quest" },
+          questProgress: Array
+          
     });
 
 const Player = mongoose.model("Player", PlayerSchema);
