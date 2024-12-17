@@ -4,8 +4,8 @@ const BossEventSchema = new mongoose.Schema({
     name : String,
     day : { type: Array, default: [] },
     startTime: { type: Date, required: true },
-    endTime: { type: Date, required: true },
-    spawner : { type: mongoose.Schema.Types.ObjectId, ref: "EnemySpawner" },
+    duration: { type: Number, default: 0 },
+    bossSpawner : { type: mongoose.Schema.Types.ObjectId, ref: "EnemySpawner" },
     });
     
 const BossEvent = mongoose.model("BossEvent", BossEventSchema);

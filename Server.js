@@ -28,14 +28,12 @@ app.post("/createPlayer", async (req, res) => {
     }
 });
 
-//http://localhost:4500/getPlayer?index=0
+//http://localhost:4500/getPlayer?playerID={}
 app.get("/getPlayer", async (req, res) => {
     try {
-        const { index } = req.query;
-        const players = await Player.find({}); 
-        const playerIndex = parseInt(index, 10);
-        const player = players[playerIndex];
-        res.status(200).json(player);
+        const { playerID } = req.query;
+        const player = await Player.findById(playerID);
+        res.json(player);
 
     } catch (error) {
         console.error(error);
@@ -564,6 +562,58 @@ app.post("/addProgress", async (req, res) => {
     } catch (error) {
         console.error("Error adding progress:", error);
         res.status(500).send("Error adding progress.");
+    }
+});
+
+//http://localhost:4500/getEnemySpawner?spawnerID={}
+app.get("/getEnemySpawner", async (req, res) => { 
+    try {
+        const { spawnerID } = req.query;
+        const spawner = await EnemySpawner.findById(spawnerID);
+        res.json(spawner);
+
+    } catch (error) {
+        console.error("Error", error);
+        res.status(500).send("Error getEnemySpawner.");
+    }
+});
+
+
+//http://localhost:4500/getEnemy?enemyID={}
+app.get("/getEnemy", async (req, res) => { 
+    try {
+        const { enemyID } = req.query;
+        const enemy = await Enemy.findById(enemyID);
+        res.json(enemy);
+
+    } catch (error) {
+        console.error("Error ", error);
+        res.status(500).send("Error getEnemy.");
+    }
+});
+//http://localhost:4500/getBossEvent?eventID={}
+app.get("/getBossEvent", async (req, res) => { 
+    try {
+        const { eventID } = req.query;
+        const bossEvent = await BossEvent.findById(eventID);
+        res.json(bossEvent);
+
+    } catch (error) {
+        console.error("Error", error);
+        res.status(500).send("Error getBossEvent.");
+    }
+});
+
+//http://localhost:4500/getGrindingEvent?eventID={}
+app.get("/getGrindingEvent", async (req, res) => { 
+    try {
+        const { eventID } = req.query;
+        const grindingEvent = await GrindingEvent.findById(eventID);
+        res.json(grindingEvent);
+
+    } catch (error) {
+        console.error("Error", error);
+        res.status(500).send("Error getGrindingEvent.");
     }
 });
 
