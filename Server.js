@@ -14,6 +14,7 @@ const Enemy = require("./models/Enemy.js")
 const EnemySpawner = require("./models/EnemySpawner.js")
 const BossEvent = require("./models/BossEvent.js")
 const GrindingEvent = require("./models/GrindingEvent.js")
+const DropRateSchema = require("./models/DropRate.js");
 // #endregion
 
 //http://localhost:4500/createPlayer
@@ -266,17 +267,21 @@ app.post("/deleteSkill", async (req, res) => {
         res.status(500).send("Error deleting skill from inventory");
     }
 });
-
+//http://localhost:4500/getItem
 //http://localhost:4500/getItem?playerID={}
-app.get("/getItem", async (req, res) => {
+app.get("getItem", async (req, res) => {
     try {
         const { playerID } = req.query;
-
         const objectId = new mongoose.Types.ObjectId(playerID);
 
         const player = await Player.findOne({ _id: objectId}).select("-__v");
         if (!player) {
-            return res.status(404).send("Player not found");
+            try {
+                const items = await Item.find(); // Fetches all documents in the Quest collection
+                res.status(200).json(items);
+            } catch (error) {
+                res.status(500).json({ error: error.message });
+            }
         }
 
         // Initialize inventory if it doesn't exist
@@ -302,7 +307,7 @@ app.get("/getItem", async (req, res) => {
         const formattedInventory = itemInventory.map(item => ({
             _id: item._id,
             name: itemMap[item._id.toString()] ? itemMap[item._id.toString()].name : 'Unknown Item',
-            amount: skill.amount
+            amount: item.amount
         }));
 
         res.json(formattedInventory);
@@ -311,7 +316,7 @@ app.get("/getItem", async (req, res) => {
         res.status(500).send("Error retrieving inventory");
     }
 });
-
+//http://localhost:4500/getSkill
 //http://localhost:4500/getSkill?playerID={}
 app.get("/getSkill", async (req, res) => {
     try {
@@ -321,7 +326,12 @@ app.get("/getSkill", async (req, res) => {
 
         const player = await Player.findOne({ _id: objectId}).select("-__v");
         if (!player) {
-            return res.status(404).send("Player not found");
+            try {
+                const skills = await Skill.find(); // Fetches all documents in the Quest collection
+                res.status(200).json(skills);
+            } catch (error) {
+                res.status(500).json({ error: error.message });
+            }
         }
 
         // Initialize inventory if it doesn't exist
@@ -500,34 +510,13 @@ app.get("/getQuestProgress", async (req, res) => {
     }
 });
 
-//http://localhost:4500/getRewards?questID={}
+//http://localhost:4500/getRewards
 app.get("/getRewards", async (req, res) => { 
     try {
-        const { questID } = req.query;
-
-        // Fetch the quest and populate the reward field
-        const quest = await Quest.findById(questID).populate("reward");
-        if (!quest) {
-            return res.status(404).send("Quest not found.");
-        }
-
-        // If no reward is associated, return an empty response
-        if (!quest.reward) {
-            return res.json({ message: "No rewards associated with this quest." });
-        }
-
-        // Format the reward data
-        const rewardDetails = {
-            name: quest.reward.name,
-            coin: quest.reward.coin,
-            xp: quest.reward.xp,
-            items: quest.reward.item 
-        };
-
-        res.json(rewardDetails);
+        const rewards = await Reward.find(); // Fetches all documents in the Quest collection
+        res.status(200).json(rewards);
     } catch (error) {
-        console.error("Error retrieving rewards:", error);
-        res.status(500).send("Error retrieving rewards.");
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -565,16 +554,13 @@ app.post("/addProgress", async (req, res) => {
     }
 });
 
-//http://localhost:4500/getEnemySpawner?spawnerID={}
+//http://localhost:4500/getEnemySpawner
 app.get("/getEnemySpawner", async (req, res) => { 
     try {
-        const { spawnerID } = req.query;
-        const spawner = await EnemySpawner.findById(spawnerID);
-        res.json(spawner);
-
+        const enemySpawners = await EnemySpawner.find(); // Fetches all documents in the Quest collection
+        res.status(200).json(enemySpawners);
     } catch (error) {
-        console.error("Error", error);
-        res.status(500).send("Error getEnemySpawner.");
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -583,6 +569,14 @@ app.get("/getEnemySpawner", async (req, res) => {
 app.get("/getEnemy", async (req, res) => { 
     try {
         const { enemyID } = req.query;
+        if(!enemyID){
+            try {
+                const enemies = await Enemy.find(); // Fetches all documents in the Quest collection
+                res.status(200).json(enemies);
+            } catch (error) {
+                res.status(500).json({ error: error.message });
+            }
+        }
         const enemy = await Enemy.findById(enemyID);
         res.json(enemy);
 
@@ -591,32 +585,34 @@ app.get("/getEnemy", async (req, res) => {
         res.status(500).send("Error getEnemy.");
     }
 });
-//http://localhost:4500/getBossEvent?eventID={}
+//http://localhost:4500/getBossEvent
 app.get("/getBossEvent", async (req, res) => { 
     try {
-        const { eventID } = req.query;
-        const bossEvent = await BossEvent.findById(eventID);
-        res.json(bossEvent);
-
+        const bossEvents = await BossEvent.find(); // Fetches all documents in the Quest collection
+        res.status(200).json(bossEvents);
     } catch (error) {
-        console.error("Error", error);
-        res.status(500).send("Error getBossEvent.");
+        res.status(500).json({ error: error.message });
     }
 });
 
-//http://localhost:4500/getGrindingEvent?eventID={}
+//http://localhost:4500/getGrindingEvent
 app.get("/getGrindingEvent", async (req, res) => { 
     try {
-        const { eventID } = req.query;
-        const grindingEvent = await GrindingEvent.findById(eventID);
-        res.json(grindingEvent);
-
+        const grindingEvents = await GrindingEvent.find(); // Fetches all documents in the Quest collection
+        res.status(200).json(grindingEvents);
     } catch (error) {
-        console.error("Error", error);
-        res.status(500).send("Error getGrindingEvent.");
+        res.status(500).json({ error: error.message });
     }
 });
 
+app.get("/getQuest", async (req, res) => { 
+    try {
+        const quests = await Quest.find(); // Fetches all documents in the Quest collection
+        res.status(200).json(quests);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
 const connectDB = async () =>{
     try {
